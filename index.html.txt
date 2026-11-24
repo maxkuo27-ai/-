@@ -1,0 +1,1251 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>小公舉的集點卡 - Pingu 企鵝家族主題</title>
+    <!-- 引入 Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 引入 Google Fonts 圓體字型 -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet">
+    <!-- 引入 Tone.js 製作可愛音效 (無外部音訊檔依賴) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <!-- 引入 Canvas Confetti 慶祝特效 -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+    <style>
+        body {
+            font-family: 'Fredoka', 'Noto Sans TC', sans-serif;
+            background: linear-gradient(180deg, #E0F4FF 0%, #F4FAFF 45%, #FFFFFF 100%);
+            min-height: 100vh;
+            overflow-x: hidden;
+            color: #1E293B;
+        }
+
+        /* 飄雪背景動畫 */
+        .snowflake {
+            position: fixed;
+            top: -10%;
+            z-index: 0;
+            user-select: none;
+            pointer-events: none;
+            color: #BAE6FD;
+            animation-name: snowflakes-fall, snowflakes-shake;
+            animation-duration: 12s, 3s;
+            animation-timing-function: linear, ease-in-out;
+            animation-iteration-count: infinite, infinite;
+        }
+
+        @keyframes snowflakes-fall {
+            0% { top: -10%; }
+            100% { top: 105%; }
+        }
+
+        @keyframes snowflakes-shake {
+            0%, 100% { transform: translateX(0); }
+            50% { transform: translateX(25px); }
+        }
+
+        /* 蓋章彈跳特效 */
+        @keyframes stampBounce {
+            0% {
+                transform: scale(2.2) rotate(-18deg);
+                opacity: 0;
+            }
+            60% {
+                transform: scale(0.9) rotate(4deg);
+                opacity: 1;
+            }
+            80% {
+                transform: scale(1.06) rotate(-2deg);
+            }
+            100% {
+                transform: scale(1) rotate(var(--rot, -3deg));
+                opacity: 1;
+            }
+        }
+
+        .animate-stamp {
+            animation: stampBounce 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+        }
+
+        /* 企鵝搖擺動畫 */
+        @keyframes waddle {
+            0%, 100% { transform: rotate(-4deg) translateY(0px); }
+            50% { transform: rotate(4deg) translateY(-3px); }
+        }
+
+        .animate-waddle {
+            animation: waddle 2.4s ease-in-out infinite;
+            transform-origin: bottom center;
+        }
+
+        /* 冰塊卡片質感 */
+        .ice-card {
+            background: rgba(255, 255, 255, 0.92);
+            backdrop-filter: blur(12px);
+            border: 3px solid #BAE6FD;
+            box-shadow: 0 12px 32px -4px rgba(14, 165, 233, 0.15), inset 0 2px 0 rgba(255, 255, 255, 0.9);
+        }
+
+        /* 印章格子樣式 */
+        .stamp-slot {
+            transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+            aspect-ratio: 1 / 1.05;
+        }
+
+        .stamp-slot:hover:not(.locked-slot) {
+            transform: translateY(-3px) scale(1.03);
+            border-color: #38BDF8;
+            box-shadow: 0 6px 14px rgba(56, 189, 248, 0.22);
+        }
+
+        .stamp-slot:active:not(.locked-slot) {
+            transform: scale(0.96);
+        }
+
+        /* 兌換券鋸齒邊緣效果 */
+        .ticket-card {
+            background: radial-gradient(circle at 0 50%, transparent 14px, #FFFBEB 15px),
+                        radial-gradient(circle at 100% 50%, transparent 14px, #FFFBEB 15px);
+            background-size: 51% 100%;
+            background-position: left, right;
+            background-repeat: no-repeat;
+        }
+    </style>
+</head>
+<body class="relative pb-16 selection:bg-sky-200 selection:text-sky-900">
+
+    <!-- 背景飄雪裝飾容器 -->
+    <div id="snowContainer" aria-hidden="true"></div>
+
+    <!-- 頂部浮動狀態列 (Toast 訊息通知) -->
+    <div id="toastBox" class="fixed top-4 left-1/2 -translate-x-1/2 z-50 pointer-events-none transition-all duration-300 opacity-0 -translate-y-4">
+        <div class="bg-slate-900/90 text-white px-5 py-2.5 rounded-full shadow-xl flex items-center gap-2.5 text-sm font-medium border border-sky-400/40 backdrop-blur-md">
+            <span id="toastIcon">🐧</span>
+            <span id="toastText">Noot Noot! 操作成功</span>
+        </div>
+    </div>
+
+    <!-- 主容器 -->
+    <main class="relative z-10 max-w-3xl mx-auto px-3 sm:px-6 pt-5 sm:pt-8">
+
+        <!-- 頂部橫幅：Pingu 插畫與標題 -->
+        <header class="ice-card rounded-3xl p-4 sm:p-6 mb-5 relative overflow-hidden">
+            <!-- 右上角冰屋 SVG 裝飾 -->
+            <svg class="absolute -right-4 -bottom-3 w-28 h-24 sm:w-36 sm:h-28 opacity-25 pointer-events-none text-sky-400" viewBox="0 0 160 120" fill="none">
+                <path d="M20 110 C20 50, 140 50, 140 110 Z" fill="currentColor"/>
+                <path d="M55 110 C55 80, 105 80, 105 110 Z" fill="#0284C7"/>
+                <path d="M35 75 Q80 68 125 75 M26 92 Q80 85 134 92 M80 52 V72 M55 73 V90 M105 73 V90" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round"/>
+            </svg>
+
+            <div class="flex flex-col sm:flex-row items-center justify-between gap-4 relative z-10">
+                <!-- 左側：可愛 Pingu 企鵝角色 + 標題 -->
+                <div class="flex items-center gap-3.5 sm:gap-5 text-center sm:text-left">
+                    <!-- Pingu 企鵝 SVG 頭像 -->
+                    <div class="w-20 h-20 sm:w-24 sm:h-24 shrink-0 animate-waddle cursor-pointer" onclick="playNootSound()" title="點我聽 Noot Noot!">
+                        <svg viewBox="0 0 120 120" class="w-full h-full drop-shadow-md">
+                            <!-- 企鵝身體/頭部輪廓 -->
+                            <ellipse cx="60" cy="64" rx="44" ry="46" fill="#1E293B"/>
+                            <!-- 左手翅膀 -->
+                            <path d="M18 68 C6 76, 8 96, 22 94 C28 92, 26 78, 22 70 Z" fill="#1E293B"/>
+                            <!-- 右手翅膀 (揮手姿勢) -->
+                            <path d="M102 64 C116 54, 118 74, 103 84 C96 88, 96 74, 100 66 Z" fill="#1E293B"/>
+                            <!-- 白色肚肚 -->
+                            <ellipse cx="60" cy="84" rx="28" ry="24" fill="#FFFFFF"/>
+                            <!-- 可愛紅暈 -->
+                            <ellipse cx="34" cy="56" rx="7" ry="4.5" fill="#FDA4AF" opacity="0.75"/>
+                            <ellipse cx="86" cy="56" rx="7" ry="4.5" fill="#FDA4AF" opacity="0.75"/>
+                            <!-- 左眼 -->
+                            <circle cx="44" cy="44" r="8.5" fill="#FFFFFF"/>
+                            <circle cx="46" cy="44" r="4.5" fill="#0F172A"/>
+                            <circle cx="47.5" cy="42" r="1.6" fill="#FFFFFF"/>
+                            <!-- 右眼 -->
+                            <circle cx="76" cy="44" r="8.5" fill="#FFFFFF"/>
+                            <circle cx="74" cy="44" r="4.5" fill="#0F172A"/>
+                            <circle cx="75.5" cy="42" r="1.6" fill="#FFFFFF"/>
+                            <!-- 經典 Pingu 橘紅色圓嘟嘟嘴巴 (Noot Noot 喇叭嘴) -->
+                            <ellipse cx="60" cy="58" rx="13" ry="9" fill="#F97316"/>
+                            <ellipse cx="60" cy="58" rx="8.5" ry="5.5" fill="#EA580C"/>
+                            <ellipse cx="60" cy="58" rx="5.5" ry="3.2" fill="#7C2D12"/>
+                            <!-- 小皇冠裝飾 (代表小公舉) -->
+                            <path d="M44 21 L49 10 L60 17 L71 10 L76 21 Z" fill="#FACC15" stroke="#EAB308" stroke-width="1.5" stroke-linejoin="round"/>
+                            <circle cx="49" cy="9" r="2" fill="#F43F5E"/>
+                            <circle cx="60" cy="15" r="2" fill="#38BDF8"/>
+                            <circle cx="71" cy="9" r="2" fill="#F43F5E"/>
+                        </svg>
+                    </div>
+
+                    <div>
+                        <div class="inline-flex items-center gap-1.5 bg-sky-100 text-sky-700 text-xs font-bold px-3 py-1 rounded-full mb-1.5 border border-sky-200">
+                            <span>❄️ PINGU 企鵝家族專屬</span>
+                            <span>•</span>
+                            <span id="soundToggleBadge" onclick="toggleSound()" class="cursor-pointer hover:text-sky-900">🔊 音效開</span>
+                        </div>
+                        <h1 class="text-2xl sm:text-3xl font-black text-slate-800 tracking-tight flex items-center justify-center sm:justify-start gap-2">
+                            <span>小公舉的集點卡</span>
+                        </h1>
+                        <p class="text-xs sm:text-sm text-slate-500 mt-1 font-medium">
+                            Noot Noot! 每天達成午＋晚餐任務得 1 點，集滿 30 點換大獎 ✨
+                        </p>
+                    </div>
+                </div>
+
+                <!-- 右側：進度徽章數字 -->
+                <div class="bg-gradient-to-br from-sky-500 to-blue-600 text-white rounded-2xl px-5 py-3 shadow-lg shadow-sky-200 text-center shrink-0 min-w-[130px]">
+                    <div class="text-xs font-bold text-sky-100 uppercase tracking-wider">目前累積點數</div>
+                    <div class="text-3xl sm:text-4xl font-black leading-none my-1">
+                        <span id="currentCountDisplay">0</span><span class="text-lg font-bold text-sky-200"> / 30</span>
+                    </div>
+                    <div id="remainingText" class="text-[11px] font-medium bg-white/20 rounded-full px-2.5 py-0.5 inline-block">
+                        還差 30 點達標
+                    </div>
+                </div>
+            </div>
+
+            <!-- 進度條區塊 -->
+            <div class="mt-4 pt-3.5 border-t border-sky-100">
+                <div class="flex justify-between items-center text-xs font-bold text-slate-600 mb-1.5">
+                    <span class="flex items-center gap-1">🐟 集點旅程進度</span>
+                    <span id="progressPercent" class="text-sky-600">0%</span>
+                </div>
+                <div class="w-full h-4 bg-sky-100 rounded-full overflow-hidden p-0.5 border border-sky-200 relative">
+                    <div id="progressBar" class="h-full bg-gradient-to-r from-sky-400 via-blue-500 to-amber-400 rounded-full transition-all duration-500 ease-out flex items-center justify-end pr-1" style="width: 0%;">
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- 集點規則與獎勵設定區 -->
+        <section class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
+            <!-- 集點規則卡片 -->
+            <div class="ice-card rounded-3xl p-4 sm:p-5 flex flex-col justify-between">
+                <div>
+                    <h2 class="text-base font-black text-slate-800 flex items-center gap-2 mb-2.5">
+                        <span class="w-7 h-7 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center text-sm">📜</span>
+                        <span>小公舉集點規則</span>
+                    </h2>
+                    <ul class="space-y-2 text-sm text-slate-600 font-medium">
+                        <li class="flex items-start gap-2 bg-sky-50/90 p-2.5 rounded-2xl border border-sky-200">
+                            <span class="text-base leading-none mt-0.5">🎯</span>
+                            <span><strong class="text-sky-800 font-black">任務內容：</strong><strong class="text-sky-700 font-bold">午餐、晚餐都有吃正餐</strong></span>
+                        </li>
+                        <li class="flex items-start gap-2 bg-emerald-50/80 p-2.5 rounded-2xl border border-emerald-100">
+                            <span class="text-base leading-none mt-0.5">✅</span>
+                            <span>每天達成任務（午＋晚餐都有正常吃正餐）即可獲得 <strong class="text-emerald-700 font-bold">1 點</strong>！</span>
+                        </li>
+                        <li class="flex items-start gap-2 bg-amber-50/80 p-2.5 rounded-2xl border border-amber-100">
+                            <span class="text-base leading-none mt-0.5">🎁</span>
+                            <span>集滿 <strong class="text-amber-600 font-bold">30 點</strong>即可兌換專屬大獎勵！</span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- 30點目標獎勵卡片 -->
+            <div class="ice-card rounded-3xl p-4 sm:p-5 flex flex-col justify-between border-amber-200 bg-gradient-to-br from-white to-amber-50/60">
+                <div>
+                    <div class="flex items-center justify-between mb-2">
+                        <h2 class="text-base font-black text-slate-800 flex items-center gap-2">
+                            <span class="w-7 h-7 rounded-xl bg-rose-100 text-rose-500 flex items-center justify-center text-sm">👑</span>
+                            <span>30 點通關獎勵</span>
+                        </h2>
+                        <button onclick="openEditRewardModal()" class="text-xs font-bold text-sky-600 hover:text-sky-800 bg-sky-50 hover:bg-sky-100 px-2.5 py-1 rounded-full transition">
+                            ✏️ 修改獎勵
+                        </button>
+                    </div>
+                    <div id="rewardTextBox" onclick="openEditRewardModal()" class="cursor-pointer bg-white border-2 border-dashed border-amber-300 hover:border-amber-400 rounded-2xl p-3 text-center transition">
+                        <div class="text-xs text-amber-600 font-bold mb-0.5">集滿 30 點可兌換：</div>
+                        <div id="rewardTitleDisplay" class="text-base sm:text-lg font-black text-slate-800">
+                            ✨ 神秘大獎 / 任選大餐一次 ✨
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 兌換按鈕 (未滿30點顯示鎖定狀態，滿30點亮起慶祝按鈕) -->
+                <div class="mt-3">
+                    <button id="redeemBtn" onclick="openRedeemModal()" disabled
+                        class="w-full py-2.5 px-4 rounded-2xl font-black text-sm transition-all flex items-center justify-center gap-2 bg-slate-200 text-slate-400 cursor-not-allowed">
+                        <span id="redeemBtnIcon">🔒</span>
+                        <span id="redeemBtnText">集滿 30 點解鎖兌換獎勵</span>
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- 家長/管理員蓋章控制台 -->
+        <section class="ice-card rounded-3xl p-4 sm:p-5 mb-5 border-sky-300">
+            <div class="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-sky-100">
+                <div class="flex items-center gap-2">
+                    <span class="text-xl"> STAMP </span>
+                    <div>
+                        <h2 class="text-base font-black text-slate-800 flex items-center gap-2">
+                            <span>蓋章控制台</span>
+                            <span id="lockStatusBadge" class="text-xs px-2.5 py-0.5 rounded-full font-bold bg-emerald-100 text-emerald-700">
+                                🔓 蓋章模式已開啟
+                            </span>
+                        </h2>
+                        <p class="text-xs text-slate-500">可點下方按鈕快速蓋章，或直接點擊集點卡格子</p>
+                    </div>
+                </div>
+
+                <!-- 密碼鎖定切換按鈕 -->
+                <button id="toggleLockBtn" onclick="handleToggleLock()" class="text-xs font-bold px-3.5 py-2 rounded-xl border transition flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200">
+                    <span id="lockBtnIcon">🔒</span>
+                    <span id="lockBtnLabel">鎖定防誤觸</span>
+                </button>
+            </div>
+
+            <!-- 快速蓋章與分享操作列 -->
+            <div id="adminControlsBody" class="mt-3.5 space-y-3">
+                <div class="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-center">
+                    <!-- 日期選擇 -->
+                    <div class="sm:col-span-4">
+                        <label class="block text-[11px] font-bold text-slate-500 mb-1 ml-1">📅 任務達成日期</label>
+                        <input type="date" id="stampDateInput" class="w-full bg-sky-50 border border-sky-200 rounded-xl px-3 py-2 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-400">
+                    </div>
+
+                    <!-- 達成每日任務蓋 1 點按鈕 -->
+                    <div class="sm:col-span-8">
+                        <label class="block text-[11px] font-bold text-transparent mb-1 select-none hidden sm:block">達成任務</label>
+                        <button onclick="quickStamp()" class="w-full py-2.5 px-4 rounded-xl font-black text-sm text-white bg-gradient-to-r from-sky-500 via-blue-500 to-indigo-500 hover:from-sky-600 hover:to-indigo-600 shadow-md shadow-sky-200 active:scale-95 transition flex items-center justify-center gap-2">
+                            <span>✅</span>
+                            <span>達成今日任務！蓋 1 點 (午+晚餐)</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 分享進度連結與重置功能 -->
+                <div class="pt-2.5 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
+                    <button onclick="copyShareLink()" class="flex-1 sm:flex-initial bg-sky-100 hover:bg-sky-200 text-sky-800 font-bold text-xs sm:text-sm px-4 py-2.5 rounded-xl transition flex items-center justify-center gap-1.5 border border-sky-200">
+                        <span>🔗</span>
+                        <span>複製最新進度連結傳給小公舉</span>
+                    </button>
+
+                    <button onclick="openResetModal()" class="text-xs font-bold text-rose-500 hover:text-rose-700 hover:bg-rose-50 px-3 py-2 rounded-xl transition flex items-center gap-1">
+                        <span>🔄</span>
+                        <span>重置集點卡</span>
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- 30格集點卡網格主體 -->
+        <section class="ice-card rounded-3xl p-4 sm:p-6 relative">
+            <div class="flex items-center justify-between mb-4">
+                <div class="flex items-center gap-2">
+                    <span class="text-lg">🐧</span>
+                    <h2 class="text-lg font-black text-slate-800">集點印章區 (共 30 格)</h2>
+                </div>
+                <span class="text-xs font-bold text-sky-600 bg-sky-50 px-3 py-1 rounded-full border border-sky-100">
+                    點擊格子可蓋章 / 編輯
+                </span>
+            </div>
+
+            <!-- 5x6 (手機 3x10 或 5x6 自適應) 格子容器 -->
+            <div id="stampGrid" class="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-6 gap-2.5 sm:gap-3">
+                <!-- 由 JavaScript 動態渲染 30 個格子 -->
+            </div>
+
+            <!-- 底部小魚裝飾 -->
+            <div class="mt-5 pt-3 border-t border-sky-100 flex items-center justify-center gap-2 text-xs text-slate-400 font-medium">
+                <span>🐟</span>
+                <span>每天午餐、晚餐都有乖乖吃正餐，Pingu 就幫小公舉蓋 1 點！</span>
+                <span>🐟</span>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- ================= 彈跳視窗區 (Modals) ================= -->
+
+    <!-- 1. 單格蓋章 / 修改彈窗 -->
+    <div id="slotModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+        <div class="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border-4 border-sky-200 transform transition-all">
+            <div class="flex items-center justify-between mb-3">
+                <h3 id="slotModalTitle" class="text-xl font-black text-slate-800">第 1 格任務蓋章</h3>
+                <button onclick="closeModal('slotModal')" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 font-bold">✕</button>
+            </div>
+            <p class="text-xs text-slate-500 mb-4">確認這一天「午餐、晚餐都有吃正餐」，即可幫小公舉蓋上 Pingu 任務印章！</p>
+
+            <div class="space-y-3.5">
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 mb-1">📅 任務達成日期</label>
+                    <input type="date" id="modalDateInput" class="w-full bg-sky-50 border border-sky-200 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-800">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 mb-1">🎯 任務內容與標記</label>
+                    <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex items-center justify-between">
+                        <span class="text-xs font-bold text-emerald-800">🍱 午餐、晚餐都有吃正餐</span>
+                        <span class="text-[11px] font-black bg-emerald-500 text-white px-2 py-0.5 rounded-full">午+晚達標</span>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 mb-1">📝 備註 (選填，例如：吃了什麼好料)</label>
+                    <input type="text" id="modalNoteInput" maxlength="12" placeholder="預設顯示：午+晚達標"
+                        class="w-full bg-slate-50 border border-slate-200 focus:border-sky-400 rounded-xl px-3 py-2 text-sm font-bold text-slate-700 focus:outline-none">
+                </div>
+
+                <div class="pt-2 flex flex-col gap-2">
+                    <button onclick="confirmSlotStamp()" class="w-full py-3 rounded-2xl font-black text-white bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-600 hover:to-blue-700 shadow-lg shadow-sky-200 transition">
+                        🐧 確認達成任務蓋章 (Noot Noot!)
+                    </button>
+                    <button id="removeStampBtn" onclick="removeSlotStamp()" class="hidden w-full py-2.5 rounded-2xl font-bold text-sm text-rose-600 bg-rose-50 hover:bg-rose-100 transition">
+                        🗑️ 取消此格印章
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. 密碼解鎖/設定彈窗 -->
+    <div id="pinModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+        <div class="bg-white rounded-3xl max-w-xs w-full p-6 shadow-2xl border-4 border-sky-200 text-center">
+            <div class="w-14 h-14 bg-sky-100 text-sky-600 rounded-2xl flex items-center justify-center text-2xl mx-auto mb-3">
+                🔐
+            </div>
+            <h3 class="text-lg font-black text-slate-800 mb-1">管理員解鎖</h3>
+            <p class="text-xs text-slate-500 mb-4">請輸入 4 位數密碼解鎖蓋章功能<br><span class="text-sky-600 font-bold">(預設密碼：0000)</span></p>
+
+            <input type="password" id="pinInput" maxlength="4" inputmode="numeric" placeholder="••••"
+                class="w-full text-center text-2xl tracking-[0.5em] font-black bg-slate-100 border-2 border-slate-200 focus:border-sky-400 rounded-2xl py-2.5 mb-4 focus:outline-none">
+
+            <div class="grid grid-cols-2 gap-2">
+                <button onclick="closeModal('pinModal')" class="py-2.5 rounded-xl font-bold text-sm bg-slate-100 text-slate-600 hover:bg-slate-200">
+                    取消
+                </button>
+                <button onclick="verifyPin()" class="py-2.5 rounded-xl font-black text-sm bg-sky-500 text-white hover:bg-sky-600 shadow-md">
+                    確認解鎖
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3. 編輯獎勵彈窗 -->
+    <div id="rewardEditModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+        <div class="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border-4 border-amber-200">
+            <div class="flex items-center justify-between mb-3">
+                <h3 class="text-lg font-black text-slate-800">👑 設定 30 點通關獎勵</h3>
+                <button onclick="closeModal('rewardEditModal')" class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 font-bold">✕</button>
+            </div>
+            <p class="text-xs text-slate-500 mb-3">寫下小公舉集滿 30 點後可以獲得的獎勵內容：</p>
+            <input type="text" id="rewardInput" maxlength="40" placeholder="例如：任選大餐一次、買新衣服..."
+                class="w-full bg-amber-50/60 border-2 border-amber-200 focus:border-amber-400 rounded-2xl px-3.5 py-2.5 text-sm font-bold text-slate-800 mb-3 focus:outline-none">
+
+            <!-- 快速預設標籤 -->
+            <div class="flex flex-wrap gap-1.5 mb-4">
+                <button type="button" onclick="setRewardPreset('🍣 任選美味大餐一次')" class="text-xs bg-slate-100 hover:bg-amber-100 text-slate-600 px-2.5 py-1 rounded-full transition">🍣 任選大餐</button>
+                <button type="button" onclick="setRewardPreset('🛍️ 專屬購物金 / 禮物一份')" class="text-xs bg-slate-100 hover:bg-amber-100 text-slate-600 px-2.5 py-1 rounded-full transition">🛍️ 禮物一份</button>
+                <button type="button" onclick="setRewardPreset('🍰 豪華下午茶甜點約會')" class="text-xs bg-slate-100 hover:bg-amber-100 text-slate-600 px-2.5 py-1 rounded-full transition">🍰 下午茶約會</button>
+            </div>
+
+            <button onclick="saveRewardText()" class="w-full py-3 rounded-2xl font-black text-white bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-500 hover:to-orange-600 shadow-md">
+                儲存獎勵設定
+            </button>
+        </div>
+    </div>
+
+    <!-- 4. 集滿 30 點獎勵兌換券慶祝彈窗 -->
+    <div id="redeemSuccessModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/65 backdrop-blur-md p-4">
+        <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border-4 border-amber-300 text-center relative overflow-hidden">
+            <!-- 頂部彩帶裝飾條 -->
+            <div class="absolute top-0 inset-x-0 h-2 bg-gradient-to-r from-sky-400 via-amber-400 to-rose-400"></div>
+
+            <div class="w-20 h-20 mx-auto mb-2 animate-bounce">
+                <svg viewBox="0 0 120 120" class="w-full h-full">
+                    <ellipse cx="60" cy="66" rx="42" ry="44" fill="#1E293B"/>
+                    <ellipse cx="60" cy="84" rx="26" ry="22" fill="#FFFFFF"/>
+                    <circle cx="44" cy="46" r="8" fill="#FFFFFF"/><circle cx="46" cy="46" r="4" fill="#0F172A"/>
+                    <circle cx="76" cy="46" r="8" fill="#FFFFFF"/><circle cx="74" cy="46" r="4" fill="#0F172A"/>
+                    <ellipse cx="60" cy="60" rx="13" ry="9" fill="#F97316"/>
+                    <ellipse cx="60" cy="60" rx="6" ry="3.5" fill="#7C2D12"/>
+                    <path d="M42 22 L48 9 L60 17 L72 9 L78 22 Z" fill="#FACC15" stroke="#EAB308" stroke-width="2"/>
+                </svg>
+            </div>
+
+            <div class="inline-block bg-amber-100 text-amber-700 font-black text-xs px-3 py-1 rounded-full mb-1">
+                🎉 NOOT NOOT! 任務大成功 🎉
+            </div>
+            <h3 class="text-2xl font-black text-slate-800 mb-1">恭喜小公舉集滿 30 點！</h3>
+            <p class="text-xs text-slate-500 mb-4">每一餐都乖乖吃完真是太棒了，請出示此兌換券領取獎勵：</p>
+
+            <!-- 專屬兌換券卡片 -->
+            <div class="ticket-card border-2 border-amber-300 rounded-2xl p-5 mb-5 shadow-inner relative">
+                <div class="text-[11px] font-bold text-amber-600 tracking-widest uppercase mb-1">PINGU OFFICIAL VOUCHER</div>
+                <div class="text-lg sm:text-xl font-black text-slate-800 my-2" id="voucherRewardName">
+                    ✨ 神秘大獎 / 任選大餐一次 ✨
+                </div>
+                <div class="border-t border-dashed border-amber-300 my-2.5"></div>
+                <div class="flex justify-between text-[11px] text-slate-500 font-bold">
+                    <span>持券人：小公舉 👑</span>
+                    <span id="voucherDate">兌換日期：2026/11/24</span>
+                </div>
+            </div>
+
+            <div class="flex flex-col gap-2">
+                <button onclick="fireConfetti()" class="w-full py-2.5 rounded-2xl font-black text-sm text-amber-900 bg-amber-300 hover:bg-amber-400 transition">
+                    🎊 再放一次慶祝彩帶
+                </button>
+                <button onclick="closeModal('redeemSuccessModal')" class="w-full py-2.5 rounded-2xl font-bold text-sm text-slate-600 bg-slate-100 hover:bg-slate-200 transition">
+                    關閉視窗
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 5. 重置集點卡確認彈窗 -->
+    <div id="resetModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+        <div class="bg-white rounded-3xl max-w-xs w-full p-6 shadow-2xl border-4 border-rose-200 text-center">
+            <div class="text-4xl mb-2">🐧💦</div>
+            <h3 class="text-lg font-black text-slate-800 mb-1">確定要重置集點卡嗎？</h3>
+            <p class="text-xs text-slate-500 mb-5">這將會清空目前所有的印章紀錄，開啟全新一輪 30 點集點卡喔！</p>
+            <div class="grid grid-cols-2 gap-2">
+                <button onclick="closeModal('resetModal')" class="py-2.5 rounded-xl font-bold text-sm bg-slate-100 text-slate-600 hover:bg-slate-200">
+                    先不要
+                </button>
+                <button onclick="confirmResetCard()" class="py-2.5 rounded-xl font-black text-sm bg-rose-500 text-white hover:bg-rose-600">
+                    確定清空重置
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        /**
+         * ==========================================
+         * 狀態管理與初始化設定
+         * ==========================================
+         */
+        const TOTAL_SLOTS = 30;
+        const STORAGE_KEY = 'pingu_princess_stamp_card_v1';
+        const DEFAULT_PIN = '0000';
+
+        // 應用程式核心狀態
+        let appState = {
+            stamps: Array(TOTAL_SLOTS).fill(null), // 每個元素為 null 或 { date: '2026-11-24', note: '午+晚達標' }
+            rewardText: '✨ 神秘大獎 / 任選大餐一次 ✨',
+            isLocked: false, // 是否鎖定防誤觸
+            soundEnabled: true
+        };
+
+        let activeEditingSlotIndex = null;
+
+        // 頁面載入後初始化
+        window.addEventListener('DOMContentLoaded', () => {
+            initSnowflakes();
+            initDateInputs();
+            loadStateFromUrlOrStorage();
+            renderAll();
+        });
+
+        /**
+         * 初始化今天日期到日期選擇器
+         */
+        function initDateInputs() {
+            const today = new Date();
+            const yyyy = today.getFullYear();
+            const mm = String(today.getMonth() + 1).padStart(2, '0');
+            const dd = String(today.getDate()).padStart(2, '0');
+            const todayStr = `${yyyy}-${mm}-${dd}`;
+            document.getElementById('stampDateInput').value = todayStr;
+        }
+
+        /**
+         * 從網址參數 (Hash) 或 localStorage 讀取集點卡進度
+         * 支援透過分享連結同步最新印章狀態！
+         */
+        function loadStateFromUrlOrStorage() {
+            let loadedFromUrl = false;
+            try {
+                const hash = window.location.hash;
+                if (hash && hash.startsWith('#data=')) {
+                    const encoded = hash.replace('#data=', '');
+                    const jsonStr = decodeURIComponent(escape(atob(encoded)));
+                    const parsed = JSON.parse(jsonStr);
+                    if (parsed && Array.isArray(parsed.stamps) && parsed.stamps.length === TOTAL_SLOTS) {
+                        appState.stamps = parsed.stamps;
+                        if (parsed.rewardText) appState.rewardText = parsed.rewardText;
+                        // 透過分享連結開啟時，預設先開啟防誤觸鎖定，保護集點進度
+                        appState.isLocked = true;
+                        loadedFromUrl = true;
+                        saveToLocalStorage();
+                        // 清除網址 hash 避免重新整理覆蓋後續編輯
+                        history.replaceState(null, '', window.location.pathname + window.location.search);
+                        setTimeout(() => {
+                            showToast('🐧', '已載入最新的小公舉集點卡進度！');
+                        }, 400);
+                    }
+                }
+            } catch (e) {
+                console.warn('解析分享連結資料失敗，改用本機儲存', e);
+            }
+
+            if (!loadedFromUrl) {
+                try {
+                    const saved = localStorage.getItem(STORAGE_KEY);
+                    if (saved) {
+                        const parsed = JSON.parse(saved);
+                        if (Array.isArray(parsed.stamps) && parsed.stamps.length === TOTAL_SLOTS) {
+                            appState.stamps = parsed.stamps;
+                        }
+                        if (parsed.rewardText) appState.rewardText = parsed.rewardText;
+                        if (typeof parsed.isLocked === 'boolean') appState.isLocked = parsed.isLocked;
+                        if (typeof parsed.soundEnabled === 'boolean') appState.soundEnabled = parsed.soundEnabled;
+                    }
+                } catch (e) {
+                    console.error('讀取本機儲存失敗', e);
+                }
+            }
+        }
+
+        /**
+         * 儲存進度到 localStorage
+         */
+        function saveToLocalStorage() {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(appState));
+            } catch (e) {
+                console.error('儲存失敗', e);
+            }
+        }
+
+        /**
+         * ==========================================
+         * 畫面渲染邏輯
+         * ==========================================
+         */
+        function renderAll() {
+            renderProgress();
+            renderRewardSection();
+            renderAdminControls();
+            renderStampGrid();
+        }
+
+        /**
+         * 更新進度數字與進度條
+         */
+        function renderProgress() {
+            const count = appState.stamps.filter(s => s !== null).length;
+            const remaining = Math.max(0, TOTAL_SLOTS - count);
+            const percent = Math.round((count / TOTAL_SLOTS) * 100);
+
+            document.getElementById('currentCountDisplay').textContent = count;
+            document.getElementById('progressPercent').textContent = `${percent}%`;
+            document.getElementById('progressBar').style.width = `${percent}%`;
+
+            const remainingEl = document.getElementById('remainingText');
+            if (remaining === 0) {
+                remainingEl.textContent = '🎉 已集滿 30 點啦！';
+                remainingEl.className = 'text-[11px] font-black bg-amber-400 text-slate-900 rounded-full px-2.5 py-0.5 inline-block animate-pulse';
+            } else {
+                remainingEl.textContent = `還差 ${remaining} 點達標`;
+                remainingEl.className = 'text-[11px] font-medium bg-white/20 rounded-full px-2.5 py-0.5 inline-block';
+            }
+
+            // 更新音效徽章
+            document.getElementById('soundToggleBadge').textContent = appState.soundEnabled ? '🔊 音效開' : '🔇 音效關';
+        }
+
+        /**
+         * 更新獎勵顯示與兌換按鈕狀態
+         */
+        function renderRewardSection() {
+            document.getElementById('rewardTitleDisplay').textContent = appState.rewardText;
+            const count = appState.stamps.filter(s => s !== null).length;
+            const redeemBtn = document.getElementById('redeemBtn');
+            const redeemIcon = document.getElementById('redeemBtnIcon');
+            const redeemText = document.getElementById('redeemBtnText');
+
+            if (count >= TOTAL_SLOTS) {
+                redeemBtn.disabled = false;
+                redeemBtn.className = 'w-full py-3 px-4 rounded-2xl font-black text-sm transition-all flex items-center justify-center gap-2 bg-gradient-to-r from-amber-400 via-orange-400 to-rose-500 text-white shadow-lg shadow-amber-200 hover:scale-[1.02] active:scale-95 cursor-pointer animate-pulse';
+                redeemIcon.textContent = '🎉';
+                redeemText.textContent = '集滿 30 點！點我兌換獎勵';
+            } else {
+                redeemBtn.disabled = true;
+                redeemBtn.className = 'w-full py-2.5 px-4 rounded-2xl font-black text-sm transition-all flex items-center justify-center gap-2 bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200';
+                redeemIcon.textContent = '🔒';
+                redeemText.textContent = `集滿 30 點解鎖兌換 (目前 ${count}/30)`;
+            }
+        }
+
+        /**
+         * 更新管理員鎖定/解鎖狀態介面
+         */
+        function renderAdminControls() {
+            const badge = document.getElementById('lockStatusBadge');
+            const btn = document.getElementById('toggleLockBtn');
+            const btnIcon = document.getElementById('lockBtnIcon');
+            const btnLabel = document.getElementById('lockBtnLabel');
+            const controlsBody = document.getElementById('adminControlsBody');
+
+            if (appState.isLocked) {
+                badge.textContent = '🔒 已鎖定 (防誤觸模式)';
+                badge.className = 'text-xs px-2.5 py-0.5 rounded-full font-bold bg-amber-100 text-amber-800';
+                btnIcon.textContent = '🔓';
+                btnLabel.textContent = '輸入密碼解鎖蓋章';
+                btn.className = 'text-xs font-black px-3.5 py-2 rounded-xl border transition flex items-center gap-1.5 bg-amber-400 hover:bg-amber-500 text-slate-900 border-amber-500 shadow-sm';
+                controlsBody.classList.add('opacity-50', 'pointer-events-none', 'select-none');
+            } else {
+                badge.textContent = '🔓 蓋章模式已開啟';
+                badge.className = 'text-xs px-2.5 py-0.5 rounded-full font-bold bg-emerald-100 text-emerald-700';
+                btnIcon.textContent = '🔒';
+                btnLabel.textContent = '鎖定防誤觸';
+                btn.className = 'text-xs font-bold px-3.5 py-2 rounded-xl border transition flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200';
+                controlsBody.classList.remove('opacity-50', 'pointer-events-none', 'select-none');
+            }
+        }
+
+        /**
+         * 渲染 30 個集點格子與 Pingu 企鵝印章
+         */
+        function renderStampGrid(newlyStampedIndex = -1) {
+            const grid = document.getElementById('stampGrid');
+            grid.innerHTML = '';
+
+            appState.stamps.forEach((stampData, index) => {
+                const slotNum = index + 1;
+                const isStamped = stampData !== null;
+                const isMilestone = slotNum % 10 === 0; // 第10、20、30格特別標記
+
+                const slotEl = document.createElement('button');
+                slotEl.type = 'button';
+                slotEl.onclick = () => handleSlotClick(index);
+
+                let baseClasses = 'stamp-slot relative rounded-2xl border-2 flex flex-col items-center justify-center p-1.5 select-none overflow-hidden ';
+                if (appState.isLocked) {
+                    baseClasses += 'locked-slot cursor-default ';
+                } else {
+                    baseClasses += 'cursor-pointer ';
+                }
+
+                if (isStamped) {
+                    baseClasses += 'bg-gradient-to-b from-sky-50 to-white border-sky-300 shadow-sm';
+                } else if (isMilestone) {
+                    baseClasses += 'bg-amber-50/60 border-dashed border-amber-300';
+                } else {
+                    baseClasses += 'bg-slate-50/80 border-dashed border-sky-200';
+                }
+
+                slotEl.className = baseClasses;
+
+                if (!isStamped) {
+                    // 未蓋章狀態：淡色編號 + 小魚/腳印浮水印
+                    slotEl.innerHTML = `
+                        <span class="text-lg sm:text-xl font-black ${isMilestone ? 'text-amber-400' : 'text-sky-200'}">${slotNum}</span>
+                        <svg class="w-6 h-6 mt-0.5 ${isMilestone ? 'text-amber-300' : 'text-sky-200/70'}" viewBox="0 0 24 24" fill="currentColor">
+                            ${isMilestone
+                                ? '<path d="M12 2L14.8 8.5L22 9.2L16.5 13.9L18.2 21L12 17.3L5.8 21L7.5 13.9L2 9.2L9.2 8.5L12 2Z"/>'
+                                : '<path d="M12 14c-3.5 0-6.5 2-7.5 4.5-.3.8.3 1.5 1.1 1.5h12.8c.8 0 1.4-.7 1.1-1.5-1-2.5-4-4.5-7.5-4.5zm-4.5-3.5c1.1 0 2-1.1 2-2.5S8.6 5.5 7.5 5.5s-2 1.1-2 2.5.9 2.5 2 2.5zm4.5-1.5c1.1 0 2-1.1 2-2.5S13.1 4 12 4s-2 1.1-2 2.5.9 2.5 2 2.5zm4.5 1.5c1.1 0 2-1.1 2-2.5s-.9-2.5-2-2.5-2 1.1-2 2.5.9 2.5 2 2.5z"/>'
+                            }
+                        </svg>
+                        ${slotNum === 30 ? '<span class="text-[9px] font-black text-amber-500 mt-0.5">大獎!</span>' : ''}
+                    `;
+                } else {
+                    // 已蓋章狀態：可愛 Pingu 企鵝臉印章 (依單雙格交替冰海藍與暖珊瑚紅印章增加豐富度)
+                    const isAltColor = index % 2 === 1;
+                    const stampColor = isAltColor ? '#E11D48' : '#0284C7';
+                    const stampBg = isAltColor ? 'bg-rose-50/90' : 'bg-sky-50/90';
+                    const rotDeg = ((index * 7) % 11) - 5; // 每格印章微幅自然傾斜角度
+                    const animClass = index === newlyStampedIndex ? 'animate-stamp' : '';
+
+                    // 格式化日期 MM/DD 與任務標籤
+                    const shortDate = formatShortDate(stampData.date);
+                    const badgeLabel = stampData.note || stampData.meal || '午+晚達標';
+
+                    slotEl.innerHTML = `
+                        <span class="absolute top-1 left-1.5 text-[10px] font-black text-slate-300">${slotNum}</span>
+                        <div class="w-full h-full flex flex-col items-center justify-center ${animClass}" style="--rot: ${rotDeg}deg; transform: rotate(${rotDeg}deg);">
+                            <!-- 圓形印章外框 -->
+                            <div class="w-14 h-14 sm:w-16 sm:h-16 rounded-full border-[2.5px] flex flex-col items-center justify-center ${stampBg} shadow-inner relative" style="border-color: ${stampColor}; color: ${stampColor};">
+                                <!-- Pingu 企鵝印章頭像 SVG -->
+                                <svg class="w-7 h-7 sm:w-8 sm:h-8 -mt-0.5" viewBox="0 0 64 64">
+                                    <circle cx="32" cy="34" r="24" fill="#1E293B"/>
+                                    <circle cx="24" cy="27" r="4.5" fill="#FFFFFF"/>
+                                    <circle cx="25" cy="27" r="2.2" fill="#0F172A"/>
+                                    <circle cx="40" cy="27" r="4.5" fill="#FFFFFF"/>
+                                    <circle cx="39" cy="27" r="2.2" fill="#0F172A"/>
+                                    <ellipse cx="32" cy="36" rx="8" ry="5.5" fill="#F97316"/>
+                                    <ellipse cx="32" cy="36" rx="3.5" ry="2" fill="#7C2D12"/>
+                                </svg>
+                                <span class="text-[8px] sm:text-[9px] font-black tracking-tighter leading-none mt-0.5">NOOT NOOT!</span>
+                            </div>
+                            <!-- 日期與午+晚達標標籤 -->
+                            <div class="mt-1 px-1.5 py-0.5 rounded-full text-[8.5px] sm:text-[9.5px] font-black text-white leading-none shadow-xs max-w-full truncate" style="background-color: ${stampColor};">
+                                ${shortDate} ${badgeLabel}
+                            </div>
+                        </div>
+                    `;
+                }
+
+                grid.appendChild(slotEl);
+            });
+        }
+
+        /**
+         * ==========================================
+         * 蓋章與互動功能邏輯
+         * ==========================================
+         */
+
+        /**
+         * 達成今日任務快速蓋 1 點 (午+晚達標)
+         */
+        function quickStamp() {
+            if (appState.isLocked) {
+                showToast('🔒', '請先解鎖蓋章模式喔！');
+                return;
+            }
+
+            const nextEmptyIndex = appState.stamps.findIndex(s => s === null);
+            if (nextEmptyIndex === -1) {
+                showToast('🎉', '已經集滿 30 點囉！快去兌換獎勵吧！');
+                openRedeemModal();
+                return;
+            }
+
+            const dateVal = document.getElementById('stampDateInput').value || getTodayString();
+            appState.stamps[nextEmptyIndex] = {
+                date: dateVal,
+                note: '午+晚達標'
+            };
+
+            saveToLocalStorage();
+            playStampSound();
+            renderProgress();
+            renderRewardSection();
+            renderStampGrid(nextEmptyIndex);
+
+            const newTotal = appState.stamps.filter(s => s !== null).length;
+            if (newTotal === TOTAL_SLOTS) {
+                setTimeout(() => {
+                    fireConfetti();
+                    openRedeemModal();
+                }, 500);
+            } else {
+                showToast('🐧', `Noot Noot! 達成午＋晚餐任務，第 ${nextEmptyIndex + 1} 格蓋章成功！`);
+            }
+        }
+
+        /**
+         * 點擊單一集點格
+         */
+        function handleSlotClick(index) {
+            if (appState.isLocked) {
+                showToast('🔒', '目前為防誤觸鎖定中，解鎖後才能編輯印章');
+                return;
+            }
+
+            activeEditingSlotIndex = index;
+            const existing = appState.stamps[index];
+            const modalTitle = document.getElementById('slotModalTitle');
+            const modalDate = document.getElementById('modalDateInput');
+            const modalNote = document.getElementById('modalNoteInput');
+            const removeBtn = document.getElementById('removeStampBtn');
+
+            modalTitle.textContent = `第 ${index + 1} 格任務蓋章`;
+
+            if (existing) {
+                modalDate.value = existing.date;
+                modalNote.value = existing.note || existing.meal || '午+晚達標';
+                removeBtn.classList.remove('hidden');
+            } else {
+                modalDate.value = document.getElementById('stampDateInput').value || getTodayString();
+                modalNote.value = '午+晚達標';
+                removeBtn.classList.add('hidden');
+            }
+
+            openModal('slotModal');
+        }
+
+        /**
+         * 確認單格蓋章/修改
+         */
+        function confirmSlotStamp() {
+            if (activeEditingSlotIndex === null) return;
+            const dateVal = document.getElementById('modalDateInput').value || getTodayString();
+            const noteVal = document.getElementById('modalNoteInput').value.trim() || '午+晚達標';
+
+            appState.stamps[activeEditingSlotIndex] = {
+                date: dateVal,
+                note: noteVal
+            };
+
+            const stampedIdx = activeEditingSlotIndex;
+            closeModal('slotModal');
+            saveToLocalStorage();
+            playStampSound();
+            renderProgress();
+            renderRewardSection();
+            renderStampGrid(stampedIdx);
+
+            const newTotal = appState.stamps.filter(s => s !== null).length;
+            if (newTotal === TOTAL_SLOTS) {
+                setTimeout(() => {
+                    fireConfetti();
+                    openRedeemModal();
+                }, 450);
+            } else {
+                showToast('🐧', `第 ${stampedIdx + 1} 格已蓋上「${noteVal}」任務印章！`);
+            }
+        }
+
+        /**
+         * 點擊單一集點格
+         */
+        function handleSlotClick(index) {
+            if (appState.isLocked) {
+                showToast('🔒', '目前為防誤觸鎖定中，解鎖後才能編輯印章');
+                return;
+            }
+
+            activeEditingSlotIndex = index;
+            const existing = appState.stamps[index];
+            const modalTitle = document.getElementById('slotModalTitle');
+            const modalDate = document.getElementById('modalDateInput');
+            const removeBtn = document.getElementById('removeStampBtn');
+
+            modalTitle.textContent = `第 ${index + 1} 格印章設定`;
+
+            if (existing) {
+                modalDate.value = existing.date;
+                selectModalMeal(existing.meal);
+                removeBtn.classList.remove('hidden');
+            } else {
+                modalDate.value = document.getElementById('stampDateInput').value || getTodayString();
+                // 智慧預設餐別：中午15點前預設午餐，15點後預設晚餐
+                const currentHour = new Date().getHours();
+                selectModalMeal(currentHour < 15 ? '午餐' : '晚餐');
+                removeBtn.classList.add('hidden');
+            }
+
+            openModal('slotModal');
+        }
+
+        /**
+         * 選擇彈窗內的午餐/晚餐按鈕樣式
+         */
+        function selectModalMeal(meal) {
+            selectedModalMeal = meal;
+            const lunchBtn = document.getElementById('mealBtnLunch');
+            const dinnerBtn = document.getElementById('mealBtnDinner');
+
+            if (meal === '午餐') {
+                lunchBtn.className = 'py-2.5 rounded-xl font-black text-sm border-2 transition flex items-center justify-center gap-1.5 bg-amber-50 border-amber-400 text-amber-700';
+                dinnerBtn.className = 'py-2.5 rounded-xl font-bold text-sm border-2 transition flex items-center justify-center gap-1.5 bg-white border-slate-200 text-slate-500';
+            } else {
+                dinnerBtn.className = 'py-2.5 rounded-xl font-black text-sm border-2 transition flex items-center justify-center gap-1.5 bg-sky-50 border-sky-400 text-sky-700';
+                lunchBtn.className = 'py-2.5 rounded-xl font-bold text-sm border-2 transition flex items-center justify-center gap-1.5 bg-white border-slate-200 text-slate-500';
+            }
+        }
+
+        /**
+         * 確認單格蓋章/修改
+         */
+        function confirmSlotStamp() {
+            if (activeEditingSlotIndex === null) return;
+            const dateVal = document.getElementById('modalDateInput').value || getTodayString();
+
+            appState.stamps[activeEditingSlotIndex] = {
+                date: dateVal,
+                meal: selectedModalMeal
+            };
+
+            const stampedIdx = activeEditingSlotIndex;
+            closeModal('slotModal');
+            saveToLocalStorage();
+            playStampSound();
+            renderProgress();
+            renderRewardSection();
+            renderStampGrid(stampedIdx);
+
+            const newTotal = appState.stamps.filter(s => s !== null).length;
+            if (newTotal === TOTAL_SLOTS) {
+                setTimeout(() => {
+                    fireConfetti();
+                    openRedeemModal();
+                }, 450);
+            } else {
+                showToast('🐧', `第 ${stampedIdx + 1} 格已蓋上「${selectedModalMeal}」印章！`);
+            }
+        }
+
+        /**
+         * 取消單格印章
+         */
+        function removeSlotStamp() {
+            if (activeEditingSlotIndex === null) return;
+            const removedIdx = activeEditingSlotIndex;
+            appState.stamps[removedIdx] = null;
+
+            closeModal('slotModal');
+            saveToLocalStorage();
+            renderAll();
+            showToast('🧽', `已取消第 ${removedIdx + 1} 格的印章`);
+        }
+
+        /**
+         * ==========================================
+         * 防誤觸密碼鎖定與分享功能
+         * ==========================================
+         */
+        function handleToggleLock() {
+            if (!appState.isLocked) {
+                // 直接上鎖
+                appState.isLocked = true;
+                saveToLocalStorage();
+                renderAdminControls();
+                renderStampGrid();
+                showToast('🔒', '已鎖定集點卡，防止小公舉誤觸！');
+            } else {
+                // 跳出密碼解鎖框
+                document.getElementById('pinInput').value = '';
+                openModal('pinModal');
+                setTimeout(() => document.getElementById('pinInput').focus(), 100);
+            }
+        }
+
+        function verifyPin() {
+            const input = document.getElementById('pinInput').value.trim();
+            if (input === DEFAULT_PIN) {
+                appState.isLocked = false;
+                saveToLocalStorage();
+                closeModal('pinModal');
+                renderAdminControls();
+                renderStampGrid();
+                playNootSound();
+                showToast('🔓', '解鎖成功！現在可以幫小公舉蓋章囉');
+            } else {
+                showToast('❌', '密碼錯誤喔！(預設密碼 0000)');
+                document.getElementById('pinInput').value = '';
+            }
+        }
+
+        // 支援在密碼輸入框按 Enter 鍵直接解鎖
+        document.getElementById('pinInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') verifyPin();
+        });
+
+        /**
+         * 產生包含目前集點進度的分享連結並複製到剪貼簿
+         */
+        function copyShareLink() {
+            try {
+                const payload = {
+                    stamps: appState.stamps,
+                    rewardText: appState.rewardText
+                };
+                const jsonStr = JSON.stringify(payload);
+                const encoded = btoa(unescape(encodeURIComponent(jsonStr)));
+                const baseUrl = window.location.href.split('#')[0];
+                const shareUrl = `${baseUrl}#data=${encoded}`;
+
+                // 使用相容 iFrame 的複製方式
+                const tempInput = document.createElement('textarea');
+                tempInput.value = shareUrl;
+                document.body.appendChild(tempInput);
+                tempInput.select();
+                document.execCommand('copy');
+                document.body.removeChild(tempInput);
+
+                showToast('🔗', '已複製最新進度連結！快傳給小公舉看吧');
+            } catch (err) {
+                console.error('複製連結失敗', err);
+                showToast('⚠️', '產生分享連結時發生錯誤');
+            }
+        }
+
+        /**
+         * ==========================================
+         * 獎勵編輯、兌換與重置功能
+         * ==========================================
+         */
+        function openEditRewardModal() {
+            if (appState.isLocked) {
+                showToast('🔒', '請先解鎖蓋章模式再修改獎勵內容');
+                return;
+            }
+            document.getElementById('rewardInput').value = appState.rewardText;
+            openModal('rewardEditModal');
+        }
+
+        function setRewardPreset(text) {
+            document.getElementById('rewardInput').value = text;
+        }
+
+        function saveRewardText() {
+            const val = document.getElementById('rewardInput').value.trim();
+            if (!val) {
+                showToast('⚠️', '獎勵內容不能是空白的喔！');
+                return;
+            }
+            appState.rewardText = val;
+            saveToLocalStorage();
+            renderRewardSection();
+            closeModal('rewardEditModal');
+            showToast('👑', '已更新 30 點通關獎勵內容！');
+        }
+
+        function openRedeemModal() {
+            const count = appState.stamps.filter(s => s !== null).length;
+            if (count < TOTAL_SLOTS) return;
+
+            document.getElementById('voucherRewardName').textContent = appState.rewardText;
+            const today = new Date();
+            document.getElementById('voucherDate').textContent =
+                `兌換日期：${today.getFullYear()}/${String(today.getMonth() + 1).padStart(2, '0')}/${String(today.getDate()).padStart(2, '0')}`;
+
+            openModal('redeemSuccessModal');
+            playCelebrationSound();
+            fireConfetti();
+        }
+
+        function openResetModal() {
+            if (appState.isLocked) {
+                showToast('🔒', '請先解鎖才能重置集點卡');
+                return;
+            }
+            openModal('resetModal');
+        }
+
+        function confirmResetCard() {
+            appState.stamps = Array(TOTAL_SLOTS).fill(null);
+            saveToLocalStorage();
+            closeModal('resetModal');
+            renderAll();
+            showToast('✨', '已開啟全新一輪小公舉集點卡！');
+        }
+
+        /**
+         * ==========================================
+         * 工具函式、音效 (Tone.js) 與視覺特效
+         * ==========================================
+         */
+        function openModal(id) {
+            const el = document.getElementById(id);
+            el.classList.remove('hidden');
+            el.classList.add('flex');
+        }
+
+        function closeModal(id) {
+            const el = document.getElementById(id);
+            el.classList.add('hidden');
+            el.classList.remove('flex');
+        }
+
+        function getTodayString() {
+            const d = new Date();
+            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        }
+
+        function formatShortDate(dateStr) {
+            if (!dateStr) return '';
+            const parts = dateStr.split('-');
+            if (parts.length === 3) {
+                return `${parseInt(parts[1], 10)}/${parseInt(parts[2], 10)}`;
+            }
+            return dateStr;
+        }
+
+        let toastTimer = null;
+        function showToast(icon, text) {
+            const box = document.getElementById('toastBox');
+            document.getElementById('toastIcon').textContent = icon;
+            document.getElementById('toastText').textContent = text;
+
+            box.classList.remove('opacity-0', '-translate-y-4');
+            box.classList.add('opacity-100', 'translate-y-0');
+
+            clearTimeout(toastTimer);
+            toastTimer = setTimeout(() => {
+                box.classList.remove('opacity-100', 'translate-y-0');
+                box.classList.add('opacity-0', '-translate-y-4');
+            }, 2800);
+        }
+
+        // 切換音效開關
+        function toggleSound() {
+            appState.soundEnabled = !appState.soundEnabled;
+            saveToLocalStorage();
+            renderProgress();
+            if (appState.soundEnabled) playNootSound();
+        }
+
+        // 模擬 Pingu 可愛「Noot Noot」雙音喇叭聲
+        async function playNootSound() {
+            if (!appState.soundEnabled || typeof Tone === 'undefined') return;
+            try {
+                await Tone.start();
+                const synth = new Tone.Synth({
+                    oscillator: { type: 'triangle' },
+                    envelope: { attack: 0.02, decay: 0.12, sustain: 0.2, release: 0.15 }
+                }).toDestination();
+                const now = Tone.now();
+                synth.triggerAttackRelease('F4', '16n', now);
+                synth.triggerAttackRelease('Bb4', '8n', now + 0.14);
+            } catch (e) {}
+        }
+
+        // 蓋章清脆音效
+        async function playStampSound() {
+            if (!appState.soundEnabled || typeof Tone === 'undefined') return;
+            try {
+                await Tone.start();
+                const synth = new Tone.MembraneSynth({
+                    pitchDecay: 0.03,
+                    octaves: 3,
+                    envelope: { attack: 0.005, decay: 0.15, sustain: 0 }
+                }).toDestination();
+                synth.triggerAttackRelease('C4', '16n');
+            } catch (e) {}
+        }
+
+        // 集滿 30 點慶祝旋律
+        async function playCelebrationSound() {
+            if (!appState.soundEnabled || typeof Tone === 'undefined') return;
+            try {
+                await Tone.start();
+                const synth = new Tone.PolySynth(Tone.Synth).toDestination();
+                const now = Tone.now();
+                synth.triggerAttackRelease('C5', '16n', now);
+                synth.triggerAttackRelease('E5', '16n', now + 0.1);
+                synth.triggerAttackRelease('G5', '16n', now + 0.2);
+                synth.triggerAttackRelease(['C5', 'E5', 'G5', 'C6'], '4n', now + 0.32);
+            } catch (e) {}
+        }
+
+        // 放慶祝彩帶
+        function fireConfetti() {
+            if (typeof confetti === 'function') {
+                confetti({
+                    particleCount: 85,
+                    spread: 70,
+                    origin: { y: 0.6 },
+                    colors: ['#38BDF8', '#FACC15', '#FB7185', '#34D399']
+                });
+            }
+        }
+
+        // 產生背景飄雪元素
+        function initSnowflakes() {
+            const container = document.getElementById('snowContainer');
+            const flakes = ['❄', '❅', '•'];
+            for (let i = 0; i < 18; i++) {
+                const el = document.createElement('div');
+                el.className = 'snowflake';
+                el.textContent = flakes[i % flakes.length];
+                el.style.left = `${Math.random() * 100}%`;
+                el.style.fontSize = `${10 + Math.random() * 12}px`;
+                el.style.opacity = `${0.35 + Math.random() * 0.45}`;
+                el.style.animationDuration = `${9 + Math.random() * 10}s, ${2.5 + Math.random() * 2}s`;
+                el.style.animationDelay = `${Math.random() * 8}s, ${Math.random() * 2}s`;
+                container.appendChild(el);
+            }
+        }
+    </script>
+</body>
+</html>
